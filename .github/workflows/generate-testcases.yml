@@ -1,0 +1,46 @@
+name: Auto Generate Test Cases
+
+on:
+  push:
+    paths:
+      - 'projects/**/input/BRD/*.docx'   # Trigger when new BRD added or changed
+  workflow_dispatch:                      # Allow manual run too
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install anthropic python-docx python-dotenv
+
+      - name: Set up API key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: echo "API key configured"
+
+      - name: Generate test cases
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          source .venv/bin/activate
+          python generate_testcases.py
+
+      - name: Commit and push generated test cases
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git add .
+          git commit -m "🧠 Auto-generated test cases [skip ci]" || echo "No changes"
+          git push origin testing
