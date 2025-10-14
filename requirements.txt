@@ -1,0 +1,4 @@
+anthropic
+python-docx
+python-dotenv
+PyMuPDF
