@@ -7,7 +7,18 @@ on:
       - 'projects/**/input/BRD/*.pdf'
       - 'projects/**/input/Figma/*.pdf'
       - 'generate_testcases.py'
+      - '.github/workflows/testcase-generation.yml'
   workflow_dispatch:
+    inputs:
+      clear_cache:
+        description: 'Clear cache before running'
+        required: false
+        type: boolean
+        default: false
+      project_filter:
+        description: 'Process specific project only (leave empty for all)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -15,6 +26,7 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -27,6 +39,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
@@ -35,26 +56,133 @@ jobs:
 
       - name: Verify installations
         run: |
-          python -c "import fitz; print('✅ PyMuPDF')"
-          python -c "import anthropic; print('✅ Claude')"
-          python -c "import openai; print('✅ OpenAI')"
-          python -c "import docx; print('✅ python-docx')"
+          echo "🔍 Verifying Python package installations..."
+          python -c "import fitz; print('✅ PyMuPDF installed')"
+          python -c "import anthropic; print('✅ Anthropic Claude SDK installed')"
+          python -c "import openai; print('✅ OpenAI SDK installed')"
+          python -c "import docx; print('✅ python-docx installed')"
+          python -c "import dotenv; print('✅ python-dotenv installed')"
+          echo "✅ All dependencies verified"
+
+      - name: Clear cache if requested
+        if: ${{ github.event.inputs.clear_cache == 'true' }}
+        run: |
+          echo "🗑️ Clearing cache..."
+          find projects -type d -name "cache" -exec rm -rf {} + 2>/dev/null || true
+          echo "✅ Cache cleared"
+
+      - name: Create required directories
+        run: |
+          echo "📁 Creating directory structure..."
+          mkdir -p projects
+          find projects -type d -name "input" -exec mkdir -p {}/BRD {}/Figma \; 2>/dev/null || true
+          echo "✅ Directory structure ready"
 
       - name: Generate test cases (Two-Stage AI)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PROJECT_FILTER: ${{ github.event.inputs.project_filter }}
         run: |
+          echo "🚀 Starting test case generation..."
+          echo "⏰ Started at: $(date)"
+          
           python generate_testcases.py
+          
+          EXIT_CODE=$?
+          echo "⏰ Finished at: $(date)"
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Test case generation failed with exit code: $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+          
+          echo "✅ Test case generation completed successfully"
+
+      - name: Upload logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: generation-logs
+          path: testcase_generation.log
+          retention-days: 30
+
+      - name: Generate summary report
+        if: always()
+        run: |
+          echo "# Test Case Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Generated at:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Count generated files
+          ANALYSIS_COUNT=$(find projects -path "*/output/analysis/*.md" | wc -l)
+          TESTCASE_COUNT=$(find projects -path "*/output/testcases/*.md" | wc -l)
+          
+          echo "## Results" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 Analysis files: $ANALYSIS_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Test case files: $TESTCASE_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show processed projects
+          echo "## Processed Projects" >> $GITHUB_STEP_SUMMARY
+          for project in projects/*/; do
+            if [ -d "$project/output/testcases" ]; then
+              PROJECT_NAME=$(basename "$project")
+              MODULE_COUNT=$(find "$project/output/testcases" -name "*.md" | wc -l)
+              echo "- **$PROJECT_NAME**: $MODULE_COUNT module(s)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Log Preview" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 20 testcase_generation.log >> $GITHUB_STEP_SUMMARY || echo "No logs available" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git add projects/*/output/**/*.md 2>/dev/null || true
+          
+          if git diff --staged --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No new changes to commit"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected and staged"
+          fi
 
       - name: Commit and push generated files
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git config --global user.email "action@github.com"
-          git config --global user.name "GitHub Action"
-          git add projects/*/output/**/*.md || echo "No files to add"
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "🤖 Two-Stage AI: Claude Analysis + OpenAI Test Cases [skip ci]"
-            git push
-          fi
+          git config --global user.name "GitHub Action Bot"
+          
+          # Get commit details
+          ANALYSIS_COUNT=$(git diff --staged --name-only | grep "analysis" | wc -l)
+          TESTCASE_COUNT=$(git diff --staged --name-only | grep "testcases" | wc -l)
+          
+          COMMIT_MSG="🤖 Two-Stage AI: Generated test cases
+
+          📊 Analysis files: $ANALYSIS_COUNT
+          ✅ Test case files: $TESTCASE_COUNT
+          ⏰ Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          [skip ci]"
+          
+          git commit -m "$COMMIT_MSG"
+          git push
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Workflow failed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please check the logs for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Common Issues" >> $GITHUB_STEP_SUMMARY
+          echo "- API keys not configured in repository secrets" >> $GITHUB_STEP_SUMMARY
+          echo "- Rate limits exceeded (check logs)" >> $GITHUB_STEP_SUMMARY
+          echo "- Invalid or corrupted input files" >> $GITHUB_STEP_SUMMARY
+          echo "- Network connectivity issues" >> $GITHUB_STEP_SUMMARY
