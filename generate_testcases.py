@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from docx import Document
 from dotenv import load_dotenv
-from anthropic import Anthropic  # ✅ Claude API package
+from anthropic import Anthropic
 import fitz  # from PyMuPDF
 
 # --- Load environment variables ---
@@ -17,7 +17,6 @@ client = Anthropic(api_key=api_key)
 # --- Define core paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECTS_DIR = os.path.join(BASE_DIR, "projects")
-# PROMPT_PATH = os.path.join(BASE_DIR, "prompts", "Copilot_prompt.txt")
 
 # --- Helper: Read BRD content ---
 def read_brd_text(file_path):
@@ -44,11 +43,8 @@ def read_brd_text(file_path):
 
 # --- Helper: Load prompt ---
 def load_prompt():
-    """
-    Load prompt from file if exists, otherwise use embedded default.
-    This makes the script work both locally and in GitHub Actions.
-    """
-    default_prompt = """
+    """Returns the embedded default prompt."""
+    return """
 You are a senior QA engineer with extensive experience in test case design.
 
 Generate comprehensive MANUAL test cases based on the BRD covering:
@@ -74,22 +70,6 @@ Requirements:
 
 Be thorough, specific, and production-ready.
 """
-    
-    # Try to load from file first
-    if os.path.exists(PROMPT_PATH):
-        try:
-            with open(PROMPT_PATH, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-                if content:
-                    print(f"✅ Loaded prompt from: {PROMPT_PATH}")
-                    return content
-        except Exception as e:
-            print(f"⚠️ Error reading prompt file: {e}")
-    
-    # Fallback to default
-    print(f"ℹ️ Using embedded default prompt (file not found at {PROMPT_PATH})")
-    return default_prompt
-
 
 # --- AI call using Claude with model fallback ---
 def generate_testcases(brd_content, prompt_template, project_name, module_name):
@@ -107,16 +87,18 @@ Below is the Business Requirement Document content:
 Generate detailed MANUAL TEST CASES as a Markdown table covering functional, UI, edge, and negative scenarios.
 """
     # Use a fallback model list for reliability
-   # models_to_try = ["claude-4.1", "claude-4.5" , "claude-sonnet-4-5-20250929"]
     models_to_try = ["claude-sonnet-4-5-20250929", "claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022"]
+    
     for model_name in models_to_try:
         try:
+            print(f"🔄 Trying model: {model_name}")
             response = client.messages.create(
                 model=model_name,
                 max_tokens=4000,
                 temperature=0.3,
                 messages=[{"role": "user", "content": prompt}]
             )
+            print(f"✅ Successfully used model: {model_name}")
             return response.content[0].text.strip()
         except Exception as e:
             print(f"⚠️ Model {model_name} failed: {e}")
@@ -141,15 +123,24 @@ def save_output(project_name, module_name, output_content):
 
 # --- MAIN FUNCTION ---
 def process_all_projects():
+    print("🚀 Starting test case generation...")
     prompt_template = load_prompt()
 
+    projects_found = False
     for project_name in os.listdir(PROJECTS_DIR):
         project_path = os.path.join(PROJECTS_DIR, project_name)
+        
+        # Skip if not a directory
+        if not os.path.isdir(project_path):
+            continue
+            
         brd_dir = os.path.join(project_path, "input", "BRD")
 
         if not os.path.exists(brd_dir):
+            print(f"⚠️ No BRD directory found for project: {project_name}")
             continue
 
+        projects_found = True
         for brd_file in os.listdir(brd_dir):
             if brd_file.lower().endswith((".docx", ".pdf")):
                 brd_path = os.path.join(brd_dir, brd_file)
@@ -164,7 +155,10 @@ def process_all_projects():
                 output = generate_testcases(brd_content, prompt_template, project_name, module_name)
                 save_output(project_name, module_name, output)
 
-    print("\n🎉 All projects processed successfully!")
+    if not projects_found:
+        print("⚠️ No projects with BRD files found in the projects directory")
+    else:
+        print("\n🎉 All projects processed successfully!")
 
 # --- Run the workflow ---
 if __name__ == "__main__":
