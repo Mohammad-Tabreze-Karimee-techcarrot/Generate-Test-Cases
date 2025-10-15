@@ -34,19 +34,24 @@ jobs:
       - name: Clean and reinstall dependencies
         run: |
           echo "🧹 Removing preinstalled packages..."
-          pip uninstall -y anthropic anthropic-sdk openai httpx httpcore || true
+          pip uninstall -y anthropic openai httpx httpcore || true
           pip cache purge || true
 
           echo "📦 Installing stable versions..."
           pip install --upgrade pip
+
+          # Force reinstall with compatible httpx
           pip install --force-reinstall --no-cache-dir \
             anthropic==0.18.1 \
+            httpx>=0.24.1 \
+            httpcore>=0.17.0 \
             openai==1.54.0 \
             python-docx \
             python-dotenv \
             PyMuPDF
 
           echo "✅ Dependency installation completed."
+
 
       - name: Verify installations
         run: |
