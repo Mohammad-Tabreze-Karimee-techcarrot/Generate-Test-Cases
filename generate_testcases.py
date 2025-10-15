@@ -44,28 +44,51 @@ def read_brd_text(file_path):
 
 # --- Helper: Load prompt ---
 def load_prompt():
-    """Load prompt from file, or use default if file doesn't exist."""
-    if os.path.exists(PROMPT_PATH):
-        with open(PROMPT_PATH, "r", encoding="utf-8") as f:
-            return f.read()
-    else:
-        print(f"⚠️ Prompt file not found at {PROMPT_PATH}, using default prompt")
-        return """
-You are an expert QA engineer specializing in creating comprehensive test cases.
+    """
+    Load prompt from file if exists, otherwise use embedded default.
+    This makes the script work both locally and in GitHub Actions.
+    """
+    default_prompt = """
+You are a senior QA engineer with extensive experience in test case design.
 
-Generate detailed, well-structured MANUAL test cases based on the provided BRD.
+Generate comprehensive MANUAL test cases based on the BRD covering:
+
+1. Functional Scenarios (Happy Path)
+2. Negative Scenarios (Error Handling)
+3. Edge Cases and Boundary Conditions
+4. UI/UX Validations
+5. Field-Level Validations (data type, length, format, mandatory/optional)
+6. Integration Points
+7. Security Considerations (if applicable)
+
+Output Format - Markdown Table:
+| Test Case ID | Module | Test Scenario | Preconditions | Test Steps | Expected Result | Test Data | Priority | Type |
 
 Requirements:
-- Cover all functional scenarios
-- Include positive and negative test cases  
-- Add edge cases and boundary conditions
-- Include UI/UX validation scenarios
-- Add field-level validations
-- Consider integration points
+- Clear and executable test cases
+- Specific test data examples
+- Both valid and invalid scenarios
+- Numbered sequentially (TC001, TC002...)
+- Priority: High/Medium/Low
+- Type: Functional/UI/Negative/Edge/Integration
 
-Output as a Markdown table with columns:
-| Test Case ID | Test Scenario | Test Steps | Expected Result | Test Data | Priority |
+Be thorough, specific, and production-ready.
 """
+    
+    # Try to load from file first
+    if os.path.exists(PROMPT_PATH):
+        try:
+            with open(PROMPT_PATH, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    print(f"✅ Loaded prompt from: {PROMPT_PATH}")
+                    return content
+        except Exception as e:
+            print(f"⚠️ Error reading prompt file: {e}")
+    
+    # Fallback to default
+    print(f"ℹ️ Using embedded default prompt (file not found at {PROMPT_PATH})")
+    return default_prompt
 
 
 # --- AI call using Claude with model fallback ---
