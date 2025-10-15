@@ -49,11 +49,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies (from requirements.txt)
+      - name: Install dependencies (clean install)
         run: |
-          echo "📦 Installing dependencies from requirements.txt..."
+          echo "🧹 Removing any existing anthropic installs..."
+          pip uninstall -y anthropic || true
+          pip uninstall -y anthropic-sdk || true
+          pip uninstall -y openai || true
+          pip uninstall -y httpx || true
+          pip uninstall -y typing-extensions || true
+
+          echo "📦 Reinstalling dependencies..."
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install anthropic==0.18.1 openai==1.54.0 python-docx python-dotenv PyMuPDF
+
+          echo "🔍 Verifying final versions..."
+          pip show anthropic
+          pip show openai
+
 
       - name: Verify package versions
         run: |
