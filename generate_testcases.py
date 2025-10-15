@@ -31,86 +31,20 @@ if not claude_api_key:
 if not openai_api_key:
     raise ValueError("❌ Please set your OPENAI_API_KEY in .env file")
 
-# Initialize clients with version-safe approach
-def init_claude_client():
-    """Initialize Claude client with fallback for different SDK versions."""
-    try:
-        # Try basic initialization (works with 0.18.1)
-        client = Anthropic(api_key=claude_api_key)
-        logger.info("✅ Claude client initialized")
-        return client
-    except TypeError as e:
-        if 'proxies' in str(e):
-            logger.error("❌ Anthropic SDK version mismatch detected!")
-            logger.error("Current error suggests wrong SDK version is installed")
-            logger.error("Expected: anthropic==0.18.1")
-            # Try to get actual version
-            try:
-                import anthropic
-                logger.error(f"Detected version: {anthropic.__version__}")
-            except:
-                pass
-            raise RuntimeError(
-                "Anthropic SDK version incompatibility. "
-                "Please ensure anthropic==0.18.1 is installed. "
-                "Check workflow 'Install dependencies' step."
-            )
-        raise
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize Claude: {e}")
-        raise
-
-claude_client = init_claude_client()
-openai_client = OpenAI(api_key=openai_api_key)
-logger.info("✅ OpenAI client initialized")
-
-# Safe client initialization (fix for GitHub runner proxy issue)
+# Initialize clients
 try:
-    import httpx
-    # Create custom HTTP client without proxy
-    http_client = httpx.Client(
-        timeout=httpx.Timeout(300.0, connect=60.0),
-        follow_redirects=True
-    )
-    claude_client = Anthropic(
-        api_key=claude_api_key,
-        http_client=http_client
-    )
+    claude_client = Anthropic(api_key=claude_api_key)
     logger.info("✅ Claude client initialized successfully")
-except TypeError:
-    # --- Compatibility Patch for Anthropic SDK (handles 'proxies' arg) ---
-
-
-    original_init = Anthropic.__init__
-
-    def safe_init(self, *args, **kwargs):
-        if "proxies" in kwargs:
-            kwargs.pop("proxies")
-    try:
-        original_init(self, *args, **kwargs)
-    except TypeError as e:
-        if "proxies" in str(e):
-            del kwargs["proxies"]
-            original_init(self, *args, **kwargs)
-        else:
-            raise
-
-Anthropic.__init__ = safe_init
-# ---------------------------------------------------------------------
-
-    # Fallback for older versions
-try:
-        claude_client = Anthropic(api_key=claude_api_key)
-        logger.info("✅ Claude client initialized (fallback method)")
 except Exception as e:
-        logger.error(f"Failed to initialize Claude client: {e}")
-        raise
-except Exception as e:
-    logger.error(f"Failed to initialize Claude client: {e}")
+    logger.error(f"❌ Failed to initialize Claude client: {e}")
     raise
 
-openai_client = OpenAI(api_key=openai_api_key)
-logger.info("✅ OpenAI client initialized successfully")
+try:
+    openai_client = OpenAI(api_key=openai_api_key)
+    logger.info("✅ OpenAI client initialized successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize OpenAI client: {e}")
+    raise
 
 # --- Define core paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
