@@ -2,28 +2,42 @@ import os
 from datetime import datetime
 from docx import Document
 from dotenv import load_dotenv
-from openai import OpenAI
+from anthropic import Anthropic  # ✅ Claude API package
+import fitz  # from PyMuPDF
 
 # --- Load environment variables ---
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
+api_key = os.getenv("ANTHROPIC_API_KEY")
 
 if not api_key:
-    raise ValueError("❌ Please set your OPENAI_API_KEY in .env file")
+    raise ValueError("❌ Please set your ANTHROPIC_API_KEY in .env file")
 
-client = OpenAI(api_key=api_key)
+client = Anthropic(api_key=api_key)
 
 # --- Define core paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECTS_DIR = os.path.join(BASE_DIR, "projects")
-PROMPT_PATH = os.path.join(BASE_DIR, "prompts", "testcase_prompt_template.txt")
+PROMPT_PATH = os.path.join(BASE_DIR, "prompts", "Copilot_prompt.txt")
 
 # --- Helper: Read BRD content ---
 def read_brd_text(file_path):
+    """
+    Reads text from .docx or .pdf files.
+    Returns a clean text string for AI processing.
+    """
     try:
-        doc = Document(file_path)
-        text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-        return text
+        if file_path.lower().endswith(".docx"):
+            doc = Document(file_path)
+            text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+        elif file_path.lower().endswith(".pdf"):
+            text = ""
+            with fitz.open(file_path) as pdf_doc:
+                for page in pdf_doc:
+                    text += page.get_text("text")
+        else:
+            print(f"⚠️ Unsupported file type: {file_path}")
+            return ""
+        return text.strip()
     except Exception as e:
         print(f"⚠️ Error reading {file_path}: {e}")
         return ""
@@ -33,7 +47,7 @@ def load_prompt():
     with open(PROMPT_PATH, "r", encoding="utf-8") as f:
         return f.read()
 
-# --- AI call ---
+# --- AI call using Claude with model fallback ---
 def generate_testcases(brd_content, prompt_template, project_name, module_name):
     prompt = f"""
 You are a senior QA engineer.
@@ -48,12 +62,24 @@ Below is the Business Requirement Document content:
 
 Generate detailed MANUAL TEST CASES as a Markdown table covering functional, UI, edge, and negative scenarios.
 """
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-    )
-    return response.choices[0].message.content.strip()
+    # Use a fallback model list for reliability
+   # models_to_try = ["claude-4.1", "claude-4.5" , "claude-sonnet-4-5-20250929"]
+    models_to_try = ["claude-sonnet-4-5-20250929", "claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022"]
+    for model_name in models_to_try:
+        try:
+            response = client.messages.create(
+                model=model_name,
+                max_tokens=4000,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text.strip()
+        except Exception as e:
+            print(f"⚠️ Model {model_name} failed: {e}")
+            continue  # try next model
+
+    print("❌ All models failed. Please check your API key or available Claude models.")
+    return "Error while generating test cases."
 
 # --- Helper: Save output ---
 def save_output(project_name, module_name, output_content):
@@ -81,7 +107,7 @@ def process_all_projects():
             continue
 
         for brd_file in os.listdir(brd_dir):
-            if brd_file.lower().endswith(".docx"):
+            if brd_file.lower().endswith((".docx", ".pdf")):
                 brd_path = os.path.join(brd_dir, brd_file)
                 module_name = os.path.splitext(brd_file)[0]
                 print(f"\n🧠 Processing {project_name} → {module_name} ...")

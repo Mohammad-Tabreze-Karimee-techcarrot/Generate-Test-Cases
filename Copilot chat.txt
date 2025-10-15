@@ -1,3 +1,0 @@
-Use /prompts/testcase_prompt_template.txt as a base.
-Generate manual test cases for the BRD in /projects/Project1/input/BRD/LoginModule.docx and screenshots in /projects/Project1/input/Screenshots/LoginPage.png.
-Save output as /projects/Project1/output/testcases/LoginModule_TestCases.md.
