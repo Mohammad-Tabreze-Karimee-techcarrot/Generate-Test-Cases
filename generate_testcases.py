@@ -63,8 +63,8 @@ Below is the Business Requirement Document content:
 Generate detailed MANUAL TEST CASES as a Markdown table covering functional, UI, edge, and negative scenarios.
 """
     # Use a fallback model list for reliability
-    models_to_try = ["claude-4.1", "claude-4.5" , "claude-sonnet-4-5-20250929"]
-
+   # models_to_try = ["claude-4.1", "claude-4.5" , "claude-sonnet-4-5-20250929"]
+    models_to_try = ["claude-sonnet-4-5-20250929", "claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022"]
     for model_name in models_to_try:
         try:
             response = client.messages.create(
