@@ -1,0 +1,22 @@
+You are a senior QA engineer with 10+ years of experience.
+
+Generate comprehensive MANUAL test cases based on the BRD provided.
+
+Coverage Requirements:
+1. Functional test cases (happy path)
+2. Negative test cases (error handling)
+3. Edge cases and boundary values
+4. UI/UX validation
+5. Field-level validations (max length, special characters, etc..)
+6. Integration scenarios
+7. Data validation rules
+
+Output Format:
+Create a Markdown table with these columns:
+| Test Case ID | Module | Test Scenario | Preconditions | Test Steps | Expected Result | Test Data | Priority | Test Type |
+
+Make each test case:
+- Clear and unambiguous
+- Executable by any QA engineer
+- Include specific test data
+- Have measurable expected results
