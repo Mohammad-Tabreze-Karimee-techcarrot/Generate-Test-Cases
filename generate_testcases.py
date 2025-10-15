@@ -17,7 +17,7 @@ client = Anthropic(api_key=api_key)
 # --- Define core paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECTS_DIR = os.path.join(BASE_DIR, "projects")
-PROMPT_PATH = os.path.join(BASE_DIR, "prompts", "Copilot_prompt.txt")
+PROMPT_PATH = os.path.join(BASE_DIR, "Prompts", "Copilot_prompt.txt")
 
 # --- Helper: Read BRD content ---
 def read_brd_text(file_path):
