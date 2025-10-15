@@ -9,16 +9,6 @@ on:
       - 'generate_testcases.py'
       - '.github/workflows/testcase-generation.yml'
   workflow_dispatch:
-    inputs:
-      clear_cache:
-        description: 'Clear cache before running'
-        required: false
-        type: boolean
-        default: false
-      project_filter:
-        description: 'Process specific project only (leave empty for all)'
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -41,52 +31,36 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Cache Python dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies (force local)
+      - name: Clean and reinstall dependencies
         run: |
-          echo "🧹 Cleaning any preinstalled Anthropics..."
-          pip uninstall -y anthropic || true
-          pip uninstall -y anthropic-sdk || true
-          pip uninstall -y openai || true
+          echo "🧹 Removing preinstalled packages..."
+          pip uninstall -y anthropic anthropic-sdk openai httpx httpcore || true
+          pip cache purge || true
 
-          echo "📦 Installing exact versions..."
+          echo "📦 Installing stable versions..."
           pip install --upgrade pip
-          pip install --target=$GITHUB_WORKSPACE/.local anthropic==0.18.1 openai==1.54.0 python-docx python-dotenv PyMuPDF
+          pip install --force-reinstall --no-cache-dir \
+            anthropic==0.16.0 \
+            openai==1.54.0 \
+            python-docx \
+            python-dotenv \
+            PyMuPDF
 
-          echo "✅ Packages installed in .local folder"
+          echo "✅ Dependency installation completed."
 
-      - name: Verify package versions
+      - name: Verify installations
         run: |
-          echo "🔍 Verifying installed package versions..."
-          pip show anthropic openai || true
-
-      - name: Clear cache if requested
-        if: ${{ github.event.inputs.clear_cache == 'true' }}
-        run: |
-          echo "🗑️ Clearing cache..."
-          find projects -type d -name "cache" -exec rm -rf {} + 2>/dev/null || true
-          echo "✅ Cache cleared"
-
-      - name: Create required directories
-        run: |
-          echo "📁 Creating directory structure..."
-          mkdir -p projects
-          find projects -type d -name "input" -exec mkdir -p {}/BRD {}/Figma \; 2>/dev/null || true
-          echo "✅ Directory structure ready"
+          echo "🔍 Verifying imports..."
+          python -c "import anthropic; print('✅ Anthropic working version:', anthropic.__version__)"
+          python -c "import openai; print('✅ OpenAI working version:', openai.__version__)"
+          python -c "import fitz; print('✅ PyMuPDF import OK')"
+          python -c "import docx; print('✅ python-docx import OK')"
 
       - name: Generate test cases (Two-Stage AI)
         env:
-          PYTHONPATH: ${{ github.workspace }}/.local  # 👈 added this line
+          PYTHONPATH: ${{ github.workspace }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PROJECT_FILTER: ${{ github.event.inputs.project_filter }}
         run: |
           echo "🚀 Starting test case generation..."
           echo "⏰ Started at: $(date)"
@@ -107,82 +81,14 @@ jobs:
           path: testcase_generation.log
           retention-days: 30
 
-      - name: Generate summary report
-        if: always()
-        run: |
-          echo "# Test Case Generation Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Generated at:** $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Count generated files
-          ANALYSIS_COUNT=$(find projects -path "*/output/analysis/*.md" | wc -l)
-          TESTCASE_COUNT=$(find projects -path "*/output/testcases/*.md" | wc -l)
-          
-          echo "## Results" >> $GITHUB_STEP_SUMMARY
-          echo "- 📊 Analysis files: $ANALYSIS_COUNT" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Test case files: $TESTCASE_COUNT" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Show processed projects
-          echo "## Processed Projects" >> $GITHUB_STEP_SUMMARY
-          for project in projects/*/; do
-            if [ -d "$project/output/testcases" ]; then
-              PROJECT_NAME=$(basename "$project")
-              MODULE_COUNT=$(find "$project/output/testcases" -name "*.md" | wc -l)
-              echo "- **$PROJECT_NAME**: $MODULE_COUNT module(s)" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Log Preview" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -n 20 testcase_generation.log >> $GITHUB_STEP_SUMMARY || echo "No logs available" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Check for changes
-        id: check_changes
-        run: |
-          git add projects/*/output/**/*.md 2>/dev/null || true
-          
-          if git diff --staged --quiet; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No new changes to commit"
-          else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "✅ Changes detected and staged"
-          fi
-
       - name: Commit and push generated files
-        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action Bot"
-          
-          # Get commit details
-          ANALYSIS_COUNT=$(git diff --staged --name-only | grep "analysis" | wc -l)
-          TESTCASE_COUNT=$(git diff --staged --name-only | grep "testcases" | wc -l)
-          
-          COMMIT_MSG="🤖 Two-Stage AI: Generated test cases
-
-          📊 Analysis files: $ANALYSIS_COUNT
-          ✅ Test case files: $TESTCASE_COUNT
-          ⏰ Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          
-          [skip ci]"
-          
-          git commit -m "$COMMIT_MSG"
-          git push
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "❌ Workflow failed!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Please check the logs for details." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Common Issues" >> $GITHUB_STEP_SUMMARY
-          echo "- API keys not configured in repository secrets" >> $GITHUB_STEP_SUMMARY
-          echo "- Rate limits exceeded (check logs)" >> $GITHUB_STEP_SUMMARY
-          echo "- Invalid or corrupted input files" >> $GITHUB_STEP_SUMMARY
-          echo "- Network connectivity issues" >> $GITHUB_STEP_SUMMARY
+          git add projects/*/output/**/*.md || true
+          if git diff --staged --quiet; then
+            echo "ℹ️ No changes to commit"
+          else
+            git commit -m "🤖 Two-Stage AI: Generated test cases [skip ci]"
+            git push
+          fi
