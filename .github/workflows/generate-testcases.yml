@@ -1,11 +1,12 @@
-name: Auto Generate Test Cases
+name: Two-Stage AI Test Case Generation
 
 on:
   push:
     paths:
       - 'projects/**/input/BRD/*.docx'
       - 'projects/**/input/BRD/*.pdf'
-      - 'generate_testcases.py'  # Also trigger when script changes
+      - 'projects/**/input/Figma/*.pdf'
+      - 'generate_testcases.py'
   workflow_dispatch:
 
 permissions:
@@ -16,28 +17,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository (fresh copy)
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           clean: true
-
-      - name: Debug - Show what we checked out
-        run: |
-          echo "=== Current Branch ==="
-          git branch
-          echo ""
-          echo "=== Last Commit ==="
-          git log -1 --oneline
-          echo ""
-          echo "=== Checking generate_testcases.py line 20 ==="
-          grep -n "load_prompt" generate_testcases.py
-          echo ""
-          echo "=== Checking lines 45-60 ==="
-          sed -n '45,60p' generate_testcases.py
-          echo ""
-          echo "=== Search for PROMPT_PATH in file ==="
-          grep -n "PROMPT_PATH" generate_testcases.py || echo "✅ PROMPT_PATH not found (good!)"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -47,28 +31,30 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install anthropic python-docx python-dotenv PyMuPDF
+          pip install anthropic==0.39.0 openai==1.54.0 python-docx python-dotenv PyMuPDF
 
       - name: Verify installations
         run: |
-          python -c "import fitz; print('✅ PyMuPDF installed successfully')"
-          python -c "import anthropic; print('✅ Anthropic installed successfully')"
-          python -c "import docx; print('✅ python-docx installed successfully')"
+          python -c "import fitz; print('✅ PyMuPDF')"
+          python -c "import anthropic; print('✅ Claude')"
+          python -c "import openai; print('✅ OpenAI')"
+          python -c "import docx; print('✅ python-docx')"
 
-      - name: Generate test cases
+      - name: Generate test cases (Two-Stage AI)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           python generate_testcases.py
 
-      - name: Commit and push generated test cases
+      - name: Commit and push generated files
         run: |
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action"
-          git add projects/*/output/testcases/*.md || echo "No files to add"
+          git add projects/*/output/**/*.md || echo "No files to add"
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "🧠 Auto-generated test cases [skip ci]"
+            git commit -m "🤖 Two-Stage AI: Claude Analysis + OpenAI Test Cases [skip ci]"
             git push
           fi
