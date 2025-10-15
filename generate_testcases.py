@@ -31,14 +31,60 @@ if not claude_api_key:
 if not openai_api_key:
     raise ValueError("❌ Please set your OPENAI_API_KEY in .env file")
 
-#claude_client = Anthropic(api_key=claude_api_key)
-# Safe client initialization (fix for GitHub runner proxy issue)
+# Initialize Claude client with error handling
 try:
     claude_client = Anthropic(api_key=claude_api_key)
+    logger.info("✅ Claude client initialized")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize Claude client: {e}")
+    logger.info("Trying alternative initialization...")
+    try:
+        # Alternative: minimal initialization
+        claude_client = Anthropic(
+            api_key=claude_api_key,
+            max_retries=2,
+            timeout=300.0
+        )
+        logger.info("✅ Claude client initialized (alternative method)")
+    except Exception as e2:
+        logger.error(f"❌ All initialization methods failed: {e2}")
+        raise RuntimeError("Cannot initialize Claude client. Check API key and network.")
+
+# Initialize OpenAI client
+try:
+    openai_client = OpenAI(api_key=openai_api_key)
+    logger.info("✅ OpenAI client initialized")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize OpenAI client: {e}")
+    raise
+
+# Safe client initialization (fix for GitHub runner proxy issue)
+try:
+    import httpx
+    # Create custom HTTP client without proxy
+    http_client = httpx.Client(
+        timeout=httpx.Timeout(300.0, connect=60.0),
+        follow_redirects=True
+    )
+    claude_client = Anthropic(
+        api_key=claude_api_key,
+        http_client=http_client
+    )
+    logger.info("✅ Claude client initialized successfully")
+except TypeError:
+    # Fallback for older versions
+    try:
+        claude_client = Anthropic(api_key=claude_api_key)
+        logger.info("✅ Claude client initialized (fallback method)")
+    except Exception as e:
+        logger.error(f"Failed to initialize Claude client: {e}")
+        raise
 except Exception as e:
     logger.error(f"Failed to initialize Claude client: {e}")
-    raise  
+    raise
+
 openai_client = OpenAI(api_key=openai_api_key)
+logger.info("✅ OpenAI client initialized successfully")
 
 # --- Define core paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

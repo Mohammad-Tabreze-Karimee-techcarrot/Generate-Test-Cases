@@ -51,8 +51,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install anthropic==0.39.0 openai==1.54.0 python-docx python-dotenv PyMuPDF
+          pip install --upgrade pip setuptools wheel
+          pip install anthropic==0.18.1
+          pip install openai==1.12.0
+          pip install python-docx==1.1.0
+          pip install python-dotenv==1.0.1
+          pip install PyMuPDF==1.23.26
+          echo "✅ All dependencies installed"
 
       - name: Verify installations
         run: |
