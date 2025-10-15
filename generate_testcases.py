@@ -31,32 +31,38 @@ if not claude_api_key:
 if not openai_api_key:
     raise ValueError("❌ Please set your OPENAI_API_KEY in .env file")
 
-# Initialize Claude client with error handling
-try:
-    claude_client = Anthropic(api_key=claude_api_key)
-    logger.info("✅ Claude client initialized")
-except Exception as e:
-    logger.error(f"❌ Failed to initialize Claude client: {e}")
-    logger.info("Trying alternative initialization...")
+# Initialize clients with version-safe approach
+def init_claude_client():
+    """Initialize Claude client with fallback for different SDK versions."""
     try:
-        # Alternative: minimal initialization
-        claude_client = Anthropic(
-            api_key=claude_api_key,
-            max_retries=2,
-            timeout=300.0
-        )
-        logger.info("✅ Claude client initialized (alternative method)")
-    except Exception as e2:
-        logger.error(f"❌ All initialization methods failed: {e2}")
-        raise RuntimeError("Cannot initialize Claude client. Check API key and network.")
+        # Try basic initialization (works with 0.18.1)
+        client = Anthropic(api_key=claude_api_key)
+        logger.info("✅ Claude client initialized")
+        return client
+    except TypeError as e:
+        if 'proxies' in str(e):
+            logger.error("❌ Anthropic SDK version mismatch detected!")
+            logger.error("Current error suggests wrong SDK version is installed")
+            logger.error("Expected: anthropic==0.18.1")
+            # Try to get actual version
+            try:
+                import anthropic
+                logger.error(f"Detected version: {anthropic.__version__}")
+            except:
+                pass
+            raise RuntimeError(
+                "Anthropic SDK version incompatibility. "
+                "Please ensure anthropic==0.18.1 is installed. "
+                "Check workflow 'Install dependencies' step."
+            )
+        raise
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Claude: {e}")
+        raise
 
-# Initialize OpenAI client
-try:
-    openai_client = OpenAI(api_key=openai_api_key)
-    logger.info("✅ OpenAI client initialized")
-except Exception as e:
-    logger.error(f"❌ Failed to initialize OpenAI client: {e}")
-    raise
+claude_client = init_claude_client()
+openai_client = OpenAI(api_key=openai_api_key)
+logger.info("✅ OpenAI client initialized")
 
 # Safe client initialization (fix for GitHub runner proxy issue)
 try:
