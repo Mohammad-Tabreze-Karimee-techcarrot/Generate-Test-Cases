@@ -1,13 +1,13 @@
 # AI SDKs
-anthropic==0.39.0
-openai==1.54.0
+anthropic
+openai
 
 # Document Processing
-python-docx==1.1.0
-PyMuPDF==1.23.8
+python-docx
+PyMuPDF
 
 # Utilities
-python-dotenv==1.0.0
+python-dotenv
 
 # Optional: For better error handling and retries
-tenacity==8.2.3
+tenacity
