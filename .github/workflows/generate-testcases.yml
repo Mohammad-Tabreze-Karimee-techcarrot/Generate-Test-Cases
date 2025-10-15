@@ -56,14 +56,11 @@ jobs:
           pip uninstall -y anthropic-sdk || true
           pip uninstall -y openai || true
 
-          echo "📦 Reinstalling clean versions..."
+          echo "📦 Installing exact versions..."
           pip install --upgrade pip
           pip install --target=$GITHUB_WORKSPACE/.local anthropic==0.18.1 openai==1.54.0 python-docx python-dotenv PyMuPDF
 
-          echo "🔧 Forcing Python to prefer local .local packages..."
-          echo "import site, sys; sys.path.insert(0, f'{site.USER_BASE}/../work/Generate-Test-Cases/Generate-Test-Cases/.local')" > $GITHUB_WORKSPACE/sitecustomize.py
-
-          echo "✅ Installed anthropic==0.18.1 and openai==1.54.0"
+          echo "✅ Packages installed in .local folder"
 
       - name: Verify package versions
         run: |
@@ -86,23 +83,20 @@ jobs:
 
       - name: Generate test cases (Two-Stage AI)
         env:
+          PYTHONPATH: ${{ github.workspace }}/.local  # 👈 added this line
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PROJECT_FILTER: ${{ github.event.inputs.project_filter }}
         run: |
           echo "🚀 Starting test case generation..."
           echo "⏰ Started at: $(date)"
-          
           python generate_testcases.py
-          
           EXIT_CODE=$?
           echo "⏰ Finished at: $(date)"
-          
           if [ $EXIT_CODE -ne 0 ]; then
             echo "❌ Test case generation failed with exit code: $EXIT_CODE"
             exit $EXIT_CODE
           fi
-          
           echo "✅ Test case generation completed successfully"
 
       - name: Upload logs as artifact
