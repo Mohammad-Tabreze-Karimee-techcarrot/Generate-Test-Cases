@@ -44,8 +44,29 @@ def read_brd_text(file_path):
 
 # --- Helper: Load prompt ---
 def load_prompt():
-    with open(PROMPT_PATH, "r", encoding="utf-8") as f:
-        return f.read()
+    """Load prompt from file, or use default if file doesn't exist."""
+    if os.path.exists(PROMPT_PATH):
+        with open(PROMPT_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+    else:
+        print(f"⚠️ Prompt file not found at {PROMPT_PATH}, using default prompt")
+        return """
+You are an expert QA engineer specializing in creating comprehensive test cases.
+
+Generate detailed, well-structured MANUAL test cases based on the provided BRD.
+
+Requirements:
+- Cover all functional scenarios
+- Include positive and negative test cases  
+- Add edge cases and boundary conditions
+- Include UI/UX validation scenarios
+- Add field-level validations
+- Consider integration points
+
+Output as a Markdown table with columns:
+| Test Case ID | Test Scenario | Test Steps | Expected Result | Test Data | Priority |
+"""
+
 
 # --- AI call using Claude with model fallback ---
 def generate_testcases(brd_content, prompt_template, project_name, module_name):

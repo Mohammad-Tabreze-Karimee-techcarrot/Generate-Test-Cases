@@ -1,14 +1,22 @@
-You are a senior QA engineer. Your task is to generate **manual test cases** for any module based on a Business Requirement Document (BRD). 
+You are a senior QA engineer with 10+ years of experience.
 
-Requirements for the test cases:
+Generate comprehensive MANUAL test cases based on the BRD provided.
 
-1. Cover all **functional flows**, including normal and edge cases.
-2. Include **UI validation**, like button labels, field names, error messages, and layout consistency.
-3. Include **field-level validation**, e.g., character limits, mandatory fields, input formats.
-4. Include **negative testing** and error handling scenarios.
-5. Provide test cases in a **Markdown table** with these columns:
+Coverage Requirements:
+1. Functional test cases (happy path)
+2. Negative test cases (error handling)
+3. Edge cases and boundary values
+4. UI/UX validation
+5. Field-level validations (max length, special characters, etc.)
+6. Integration scenarios
+7. Data validation rules
 
-| Test Case ID | Test Scenario | Preconditions | Test Steps | Expected Result | Priority | Type |
+Output Format:
+Create a Markdown table with these columns:
+| Test Case ID | Module | Test Scenario | Preconditions | Test Steps | Expected Result | Test Data | Priority | Test Type |
 
-6. Ensure that each test case is **clear, complete, and easy to execute manually**.
-7. Do not generate test scripts, only **manual test case descriptions**.
+Make each test case:
+- Clear and unambiguous
+- Executable by any QA engineer
+- Include specific test data
+- Have measurable expected results
