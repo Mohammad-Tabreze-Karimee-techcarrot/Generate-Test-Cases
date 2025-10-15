@@ -31,7 +31,13 @@ if not claude_api_key:
 if not openai_api_key:
     raise ValueError("❌ Please set your OPENAI_API_KEY in .env file")
 
-claude_client = Anthropic(api_key=claude_api_key)
+#claude_client = Anthropic(api_key=claude_api_key)
+# Safe client initialization (fix for GitHub runner proxy issue)
+try:
+    claude_client = Anthropic(api_key=claude_api_key, proxies=None)
+except TypeError:
+    # Fallback if proxies argument is not accepted
+    claude_client = Anthropic(api_key=claude_api_key)   
 openai_client = OpenAI(api_key=openai_api_key)
 
 # --- Define core paths ---
