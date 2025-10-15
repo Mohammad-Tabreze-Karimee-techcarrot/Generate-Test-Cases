@@ -7,6 +7,7 @@ on:
       - 'projects/**/input/BRD/*.pdf'
       - 'projects/**/input/Figma/*.pdf'
       - 'generate_testcases.py'
+      - '.github/workflows/testcase-generation.yml'
   workflow_dispatch:
     inputs:
       clear_cache:
@@ -14,6 +15,10 @@ on:
         required: false
         type: boolean
         default: false
+      project_filter:
+        description: 'Process specific project only (leave empty for all)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -34,51 +39,46 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          # REMOVE cache to force fresh install
+          cache: 'pip'
 
-      - name: Clear pip cache
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies (from requirements.txt)
         run: |
-          pip cache purge || true
-          echo "✅ Pip cache cleared"
+          echo "📦 Installing dependencies from requirements.txt..."
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Install dependencies (force specific versions)
+      - name: Verify package versions
         run: |
-          echo "📦 Installing Python dependencies..."
-          pip install --upgrade pip setuptools wheel
-          
-          # Force remove any existing versions
-          pip uninstall -y anthropic openai python-docx PyMuPDF python-dotenv 2>/dev/null || true
-          
-          # Install exact versions
-          pip install --no-cache-dir anthropic==0.18.1
-          pip install --no-cache-dir openai==1.12.0
-          pip install --no-cache-dir python-docx==1.1.0
-          pip install --no-cache-dir python-dotenv==1.0.1
-          pip install --no-cache-dir PyMuPDF==1.23.26
-          
-          echo ""
-          echo "✅ Installation complete. Verifying versions:"
-          echo "================================================"
-          pip show anthropic | grep -E "Name|Version"
-          pip show openai | grep -E "Name|Version"
-          pip show python-docx | grep -E "Name|Version"
-          pip show PyMuPDF | grep -E "Name|Version"
-          echo "================================================"
+          echo "🔍 Verifying installed package versions..."
+          pip show anthropic openai || true
 
-      - name: Verify installations
+      - name: Clear cache if requested
+        if: ${{ github.event.inputs.clear_cache == 'true' }}
         run: |
-          echo "🔍 Verifying Python imports..."
-          python -c "import fitz; print('✅ PyMuPDF')"
-          python -c "import anthropic; print(f'✅ Anthropic v{anthropic.__version__}')"
-          python -c "import openai; print(f'✅ OpenAI v{openai.__version__}')"
-          python -c "import docx; print('✅ python-docx')"
-          python -c "import dotenv; print('✅ python-dotenv')"
-          echo "✅ All imports successful"
+          echo "🗑️ Clearing cache..."
+          find projects -type d -name "cache" -exec rm -rf {} + 2>/dev/null || true
+          echo "✅ Cache cleared"
 
-      - name: Generate test cases
+      - name: Create required directories
+        run: |
+          echo "📁 Creating directory structure..."
+          mkdir -p projects
+          find projects -type d -name "input" -exec mkdir -p {}/BRD {}/Figma \; 2>/dev/null || true
+          echo "✅ Directory structure ready"
+
+      - name: Generate test cases (Two-Stage AI)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PROJECT_FILTER: ${{ github.event.inputs.project_filter }}
         run: |
           echo "🚀 Starting test case generation..."
           echo "⏰ Started at: $(date)"
@@ -89,13 +89,13 @@ jobs:
           echo "⏰ Finished at: $(date)"
           
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "❌ Test case generation failed"
+            echo "❌ Test case generation failed with exit code: $EXIT_CODE"
             exit $EXIT_CODE
           fi
           
-          echo "✅ Completed successfully"
+          echo "✅ Test case generation completed successfully"
 
-      - name: Upload logs
+      - name: Upload logs as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -103,15 +103,82 @@ jobs:
           path: testcase_generation.log
           retention-days: 30
 
-      - name: Commit generated files
+      - name: Generate summary report
+        if: always()
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+          echo "# Test Case Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Generated at:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Count generated files
+          ANALYSIS_COUNT=$(find projects -path "*/output/analysis/*.md" | wc -l)
+          TESTCASE_COUNT=$(find projects -path "*/output/testcases/*.md" | wc -l)
+          
+          echo "## Results" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 Analysis files: $ANALYSIS_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Test case files: $TESTCASE_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show processed projects
+          echo "## Processed Projects" >> $GITHUB_STEP_SUMMARY
+          for project in projects/*/; do
+            if [ -d "$project/output/testcases" ]; then
+              PROJECT_NAME=$(basename "$project")
+              MODULE_COUNT=$(find "$project/output/testcases" -name "*.md" | wc -l)
+              echo "- **$PROJECT_NAME**: $MODULE_COUNT module(s)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Log Preview" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 20 testcase_generation.log >> $GITHUB_STEP_SUMMARY || echo "No logs available" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for changes
+        id: check_changes
+        run: |
           git add projects/*/output/**/*.md 2>/dev/null || true
           
           if git diff --staged --quiet; then
-            echo "ℹ️ No changes to commit"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No new changes to commit"
           else
-            git commit -m "🤖 Generated test cases [skip ci]"
-            git push
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected and staged"
           fi
+
+      - name: Commit and push generated files
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action Bot"
+          
+          # Get commit details
+          ANALYSIS_COUNT=$(git diff --staged --name-only | grep "analysis" | wc -l)
+          TESTCASE_COUNT=$(git diff --staged --name-only | grep "testcases" | wc -l)
+          
+          COMMIT_MSG="🤖 Two-Stage AI: Generated test cases
+
+          📊 Analysis files: $ANALYSIS_COUNT
+          ✅ Test case files: $TESTCASE_COUNT
+          ⏰ Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          [skip ci]"
+          
+          git commit -m "$COMMIT_MSG"
+          git push
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Workflow failed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please check the logs for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Common Issues" >> $GITHUB_STEP_SUMMARY
+          echo "- API keys not configured in repository secrets" >> $GITHUB_STEP_SUMMARY
+          echo "- Rate limits exceeded (check logs)" >> $GITHUB_STEP_SUMMARY
+          echo "- Invalid or corrupted input files" >> $GITHUB_STEP_SUMMARY
+          echo "- Network connectivity issues" >> $GITHUB_STEP_SUMMARY
