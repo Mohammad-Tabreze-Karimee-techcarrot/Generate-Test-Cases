@@ -61,12 +61,9 @@ jobs:
           pip install --target=$GITHUB_WORKSPACE/.local anthropic==0.18.1 openai==1.54.0 python-docx python-dotenv PyMuPDF
 
           echo "🔧 Forcing Python to prefer local .local packages..."
-          echo "import site, sys; sys.path.insert(0, f'{site.USER_BASE}/../work/Generate-Test-Cases/Generate-Test-Cases/.local')" > sitecustomize.py
-          mv sitecustomize.py $GITHUB_WORKSPACE/
+          echo "import site, sys; sys.path.insert(0, f'{site.USER_BASE}/../work/Generate-Test-Cases/Generate-Test-Cases/.local')" > $GITHUB_WORKSPACE/sitecustomize.py
 
           echo "✅ Installed anthropic==0.18.1 and openai==1.54.0"
-
-
 
       - name: Verify package versions
         run: |
