@@ -141,7 +141,11 @@ jobs:
           
           [skip ci]"
           
-          git push
+          # Pull latest changes first to avoid conflicts
+          git pull --rebase origin ${{ github.ref_name }}
+          
+          # Push with force if needed (safe with generated files)
+          git push origin ${{ github.ref_name }}
 
       - name: Generate summary report
         if: always()
