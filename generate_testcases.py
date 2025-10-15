@@ -78,11 +78,31 @@ try:
     )
     logger.info("✅ Claude client initialized successfully")
 except TypeError:
-    # Fallback for older versions
+    # --- Compatibility Patch for Anthropic SDK (handles 'proxies' arg) ---
+
+
+    original_init = Anthropic.__init__
+
+    def safe_init(self, *args, **kwargs):
+        if "proxies" in kwargs:
+            kwargs.pop("proxies")
     try:
+        original_init(self, *args, **kwargs)
+    except TypeError as e:
+        if "proxies" in str(e):
+            del kwargs["proxies"]
+            original_init(self, *args, **kwargs)
+        else:
+            raise
+
+Anthropic.__init__ = safe_init
+# ---------------------------------------------------------------------
+
+    # Fallback for older versions
+try:
         claude_client = Anthropic(api_key=claude_api_key)
         logger.info("✅ Claude client initialized (fallback method)")
-    except Exception as e:
+except Exception as e:
         logger.error(f"Failed to initialize Claude client: {e}")
         raise
 except Exception as e:

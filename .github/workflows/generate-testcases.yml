@@ -49,22 +49,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies (clean install)
+      - name: Install dependencies (force local)
         run: |
-          echo "🧹 Removing any existing anthropic installs..."
+          echo "🧹 Cleaning any preinstalled Anthropics..."
           pip uninstall -y anthropic || true
           pip uninstall -y anthropic-sdk || true
           pip uninstall -y openai || true
-          pip uninstall -y httpx || true
-          pip uninstall -y typing-extensions || true
 
-          echo "📦 Reinstalling dependencies..."
+          echo "📦 Reinstalling clean versions..."
           pip install --upgrade pip
-          pip install anthropic==0.18.1 openai==1.54.0 python-docx python-dotenv PyMuPDF
+          pip install --target=$GITHUB_WORKSPACE/.local anthropic==0.18.1 openai==1.54.0 python-docx python-dotenv PyMuPDF
 
-          echo "🔍 Verifying final versions..."
-          pip show anthropic
-          pip show openai
+          echo "🔧 Forcing Python to prefer local .local packages..."
+          echo "import site, sys; sys.path.insert(0, f'{site.USER_BASE}/../work/Generate-Test-Cases/Generate-Test-Cases/.local')" > sitecustomize.py
+          mv sitecustomize.py $GITHUB_WORKSPACE/
+
+          echo "✅ Installed anthropic==0.18.1 and openai==1.54.0"
+
 
 
       - name: Verify package versions
