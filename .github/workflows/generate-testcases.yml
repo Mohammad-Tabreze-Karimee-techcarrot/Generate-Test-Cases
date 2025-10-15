@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - 'projects/**/input/BRD/*.docx'   # Trigger when new BRD added or changed
-  workflow_dispatch:                      # Allow manual run too
+  workflow_dispatch:                      # Allow manual trigger
 
 jobs:
   generate:
@@ -21,20 +21,18 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install anthropic python-docx python-dotenv
+          python -m pip install --upgrade pip
+          pip install anthropic python-docx python-dotenv pandas requests PyMuPDF
 
       - name: Set up API key
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: echo "API key configured"
+        run: echo "✅ API key configured"
 
       - name: Generate test cases
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          source .venv/bin/activate
           python generate_testcases.py
 
       - name: Commit and push generated test cases
@@ -42,5 +40,5 @@ jobs:
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action"
           git add .
-          git commit -m "🧠 Auto-generated test cases [skip ci]" || echo "No changes"
+          git commit -m "🧠 Auto-generated test cases [skip ci]" || echo "No changes to commit"
           git push origin testing
