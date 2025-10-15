@@ -7,7 +7,7 @@ Coverage Requirements:
 2. Negative test cases (error handling)
 3. Edge cases and boundary values
 4. UI/UX validation
-5. Field-level validations (max length, special characters, etc.)
+5. Field-level validations (max length, special characters, etc..)
 6. Integration scenarios
 7. Data validation rules
 
