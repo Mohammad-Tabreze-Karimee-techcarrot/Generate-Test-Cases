@@ -460,7 +460,7 @@ Generate the test cases now in a well-formatted markdown table."""
             logger.info(f"🔄 OpenAI generating test cases... (Attempt {attempt + 1}/{CONFIG['max_retries']})")
             
             response = openai_client.chat.completions.create(
-                model="gpt-4-turbo",
+                model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": testcase_prompt}],
                 max_tokens=CONFIG["openai_max_tokens"],
                 temperature=CONFIG["openai_temperature"]
